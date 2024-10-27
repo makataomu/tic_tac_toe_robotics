@@ -10,14 +10,17 @@ def apply_perspective_transform(image, pts, grid_width=600, grid_height=600):
     M = cv2.getPerspectiveTransform(pts, dst_pts)
     # Apply the perspective transformation to warp the image
     warped = cv2.warpPerspective(image, M, (grid_width, grid_height))
-    
+
     return warped
 
 # Function to detect the grid and apply perspective correction
-def detect_grid_and_cells(image_path, resize_dim=(600, 600), blur_kernel=(5, 5), 
+def detect_grid_and_cells(image_path, image=None, resize_dim=(600, 600), blur_kernel=(5, 5), 
                           adaptive_thresh_block_size=11, adaptive_thresh_C=2, 
                           min_area=10000, show_image=True):
-    image = cv2.imread(image_path)
+    if image is None:
+        if image_path is None:
+            raise ValueError("if image isn't provided, you should provide image_path")
+        image = cv2.imread(image_path)
     image = cv2.resize(image, resize_dim)
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -125,6 +128,3 @@ def divide_into_cells(grid_bounding_box, image, color_cells=True, grid_size=3, t
         cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0, image)
 
     return cells
-
-# example:
-# cells = detect_grid_and_cells(r"..\images\3.png")
