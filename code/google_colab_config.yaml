@@ -1,9 +1,0 @@
-
-path: C:\Users\77019\Desktop\kbtu\5 sem\tic_tac_toe_cv\new_data # dataset root dir
-train: images/train  # train images (relative to 'path')
-val: images/test  # val images (relative to 'path')
-
-# Classes
-names:
-  0: x
-  1: o
