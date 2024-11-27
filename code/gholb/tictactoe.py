@@ -5,8 +5,8 @@ Tic Tac Toe Player
 import math
 import copy
 
-X = "X"
-O = "O"
+X = "x"
+O = "o"
 EMPTY = None
 
 
@@ -129,9 +129,9 @@ def utility(board):
     """
     Returns 1 if X has won the game, -1 if O has won, 0 otherwise.
     """
-    if winner(board) == 'X':
+    if winner(board) == X:
         return 1
-    elif winner(board) == 'O':
+    elif winner(board) == O:
         return -1
     elif winner(board) is None:
         return 0

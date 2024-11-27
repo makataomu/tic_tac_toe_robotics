@@ -6,9 +6,19 @@ from ultralytics import YOLO
 import time
 from gholb import tictactoe as ttt 
 
-X = "X"
-O = "O"
+X = "x"
+O = "o"
 EMPTY = None
+
+CELLS_COORDS = [{'x0': 207, 'y0': 121, 'x1': 298, 'y1': 215},
+                {'x0': 298, 'y0': 122, 'x1': 392, 'y1': 216},
+                {'x0': 393, 'y0': 123, 'x1': 488, 'y1': 217},
+                {'x0': 205, 'y0': 213, 'x1': 296, 'y1': 309},
+                {'x0': 298, 'y0': 215, 'x1': 391, 'y1': 311},
+                {'x0': 392, 'y0': 216, 'x1': 488, 'y1': 311},
+                {'x0': 204, 'y0': 307, 'x1': 295, 'y1': 405},
+                {'x0': 296, 'y0': 309, 'x1': 390, 'y1': 407},
+                {'x0': 391, 'y0': 311, 'x1': 487, 'y1': 409}]
 
 def load_yolo_model(model_path):
     return YOLO(model_path)
@@ -175,8 +185,8 @@ def find_cell_for_object(center, cells):
     return None
 
 # Function to detect X/O and identify corresponding cell
-def detect_xo_and_identify_cells(frame, model, cells):
-    results = model.predict(source=frame, conf=0.5, show=False, verbose=False)  # Adjust `conf` if necessary
+def detect_xo_and_identify_cells(frame, model, cells, show_yolo=False):
+    results = model.predict(source=frame, conf=0.2, show=show_yolo, verbose=False)  # Adjust `conf` if necessary
     detected_objects = []
 
     for result in results:
@@ -251,8 +261,7 @@ def get_original_image_cells(image, resize_dim=(600, 600), show_image=False):
     except:
         raise ValueError("grid not found")
 
-def convert_ai_move_for_robot(move: Tuple[int, int], cells: Dict): 
-    cell_index = move[0] * 3 + move[1]
+def convert_ai_move_for_robot(cell_index, cells: Dict): 
     x_center = (cells[cell_index]['x0'] + cells[cell_index]['x1']) / 2
     y_center = (cells[cell_index]['y0'] + cells[cell_index]['y1']) / 2
     return x_center, y_center
@@ -285,7 +294,7 @@ def track_positions(detected_objects, frame_time, stable_positions, duration=2):
     for obj in detected_objects:
         cell_index = obj['cell_index']
         label = obj['label']
-        
+
         if (label, cell_index) in stable_positions:
             last_seen_time = stable_positions[(label, cell_index)]
             if frame_time - last_seen_time >= duration:
@@ -307,15 +316,17 @@ def initial_state():
 def update_board(board, confirmed_moves):
     for move in confirmed_moves:
         row, col = move['cell_index'] // 3, move['cell_index'] % 3
-        board[row][col] = X if move['label'] == "x" else O
+        board[row][col] = X if move['label'] == X else O
     return board 
 
 # Process live video feed and detect objects
-def process_live_video(video_path, model_path, show_image=False, user='X'):
+def process_live_video(video_path, model_path, show_image=False, user=X, hardcode_cells=True, move_duration=2, show_yolo=False):
 
     ai_turn = True
-    if user == 'X':
+    ai_sign = X
+    if user == X:
         ai_turn = False
+        ai_sign = O
 
     model = load_yolo_model(model_path)
 
@@ -329,7 +340,10 @@ def process_live_video(video_path, model_path, show_image=False, user='X'):
         return
     
     # NOTE those are bboxes for now
-    original_cells = get_original_image_cells(first_frame, show_image=show_image) # order is correct
+    if hardcode_cells:
+        original_cells = CELLS_COORDS
+    else:
+        original_cells = get_original_image_cells(first_frame, show_image=show_image) # order is correct
 
     if show_image:
         first_frame_with_cells = draw_cells(first_frame.copy(), original_cells, color=(0, 255, 0), thickness=2)
@@ -338,7 +352,7 @@ def process_live_video(video_path, model_path, show_image=False, user='X'):
         cv2.waitKey(0)
 
     # Initialize stable positions with the first frame detections
-    initial_detections = detect_xo_and_identify_cells(first_frame, model, original_cells)
+    initial_detections = detect_xo_and_identify_cells(first_frame, model, original_cells, show_yolo=show_yolo)
     frame_time = time.time()
     current_positions = {(obj['label'], obj['cell_index']): frame_time for obj in initial_detections}
     board = initial_state()
@@ -350,12 +364,12 @@ def process_live_video(video_path, model_path, show_image=False, user='X'):
             break
         frame_time = time.time()  # Current frame time
         
-        detected_objects = detect_xo_and_identify_cells(frame, model, original_cells)
+        detected_objects = detect_xo_and_identify_cells(frame, model, original_cells, show_yolo=show_yolo)
         confirmed_moves, current_positions = track_positions(
             detected_objects, 
             frame_time, 
             stable_positions=current_positions, 
-            duration=2
+            duration=move_duration
         )
 
         print(confirmed_moves, current_positions)
@@ -394,20 +408,19 @@ def process_live_video(video_path, model_path, show_image=False, user='X'):
                     board = ttt.result(board, move)
 
                     # Send cell center to robot
-                    robot_move = convert_ai_move_for_robot(move, original_cells)
+                    cell_index = move[0] * 3 + move[1]
+                    robot_move = convert_ai_move_for_robot(cell_index, original_cells)
                     send_move_to_robot(robot_move)
+
+                    frame_time = time.time()
+                    current_positions[ai_sign, cell_index] = frame_time
 
                     ai_turn = False
                 else:
                     print("robot doesnt mace moves")
 
                     ai_turn = True
-
             
-            # TODO update current_positions according to the move
-            # frame_time = time.time()
-            # current_positions[next_move['label'], next_move['cell_index']] = frame_time
-
         if show_image:
             cv2.imshow('Real-Time Tic Tac Toe', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -415,4 +428,3 @@ def process_live_video(video_path, model_path, show_image=False, user='X'):
 
     video.release()
     cv2.destroyAllWindows()
-
